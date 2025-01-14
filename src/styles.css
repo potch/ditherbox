@@ -1,0 +1,132 @@
+*,
+*:before,
+*:after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html {
+  font-size: 13px;
+}
+body {
+  font-family: sans-serif;
+}
+
+.app {
+  display: grid;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  grid: "form output" 1fr "preview output" auto/360px 1fr;
+  background: #888;
+  overflow: hidden;
+}
+.output {
+  grid-area: output;
+  place-self: center;
+  overflow: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+.form {
+  grid-area: form;
+  background: #fff;
+  padding: 1rem;
+  overflow: auto;
+}
+form {
+  display: grid;
+  grid-auto-rows: auto;
+  align-items: start;
+  grid-gap: 1rem;
+}
+button,
+.button {
+  padding: 1rem;
+  font-size: inherit;
+  appearance: none;
+  background: #eee;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font: inherit;
+  text-decoration: none;
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+button:hover,
+.button:hover {
+  background: #ccc;
+}
+.preview {
+  grid-area: preview;
+  display: flex;
+  background: #fff;
+  align-content: center;
+  justify-content: center;
+}
+.preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
+input[type="range"] {
+  width: 100%;
+}
+.byline {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  z-index: 1;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  background: #888;
+}
+.form__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  flex-direction: row;
+  padding: 0.5rem 0;
+}
+.form__row + .form__row {
+  border-top: 1px solid #ddd;
+}
+.slider {
+  width: 100%;
+  padding: 0.5rem 0;
+  display: grid;
+  grid-template-columns: 64px 1fr 5ch;
+  align-items: center;
+  grid-gap: 1rem;
+}
+.slider__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+summary {
+  padding: 0.5rem 1rem;
+  margin-inline: -1rem;
+  cursor: pointer;
+}
+summary:hover {
+  background: #eee;
+}
+form h2 {
+  font-size: 1.1rem;
+  display: inline-block;
+}
+input[type="number"] {
+  padding: 0.25rem 0.5rem;
+}
+.slider__value::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+select {
+  padding: 0.25rem 0.5rem;
+}
+input:disabled {
+  opacity: 0.5;
+}
