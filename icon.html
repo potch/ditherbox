@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DitherBox</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+      html {
+        background: #f8f8f8;
+      }
+      body {
+        text-align: center;
+        font-family: Poppins;
+      }
+      svg {
+        display: block;
+        width: 512px;
+        aspect-ratio: 1/1;
+        margin: 1em auto 0;
+        box-shadow: 0 0 0 1px #000;
+      }
+      h1 {
+        color: #444;
+        font-size: 10vh;
+        font-weight: 500;
+        margin: 0;
+      }
+    </style>
+    <script type="module" defer>
+      const radius = 200;
+      const width = 832;
+      const outerThickness = 64;
+      const innerRadius = radius - outerThickness;
+      const innerWidth = width - outerThickness * 2;
+
+      const tl = (1024 - width) / 2;
+
+      const pdw = 4;
+      const pdb = 2;
+
+      const hue = 180;
+      const sat = 100;
+      const val = 42;
+
+      const shade = 5;
+      const cool = 5;
+
+      const scale = 2.5;
+
+      document.body.innerHTML += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+      <defs>
+        <linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="hsl(${hue}, 100%, ${val}%)" />
+          <stop offset="100%" stop-color="hsl(${hue + cool}, 100%, ${
+        val - shade
+      }%)" />
+        </linearGradient>
+        <linearGradient id="grad2" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="hsl(${hue + cool}, 100%, ${
+        val - shade
+      }%)" />
+          <stop offset="100%" stop-color="hsl(${hue}, 100%, ${val}%)" />
+        </linearGradient>
+        <mask id="dither">
+          <rect x="0" y="0" width="256" height="256" fill="#fff" />
+        </mask>
+        <filter id="shadow">
+          <feDropShadow dx="${-pdw}" dy="${-pdw}" flood-color="#0048" stdDeviation="${pdb}" />
+          <feDropShadow dx="${pdw}" dy="${-pdw}" flood-color="#0048" stdDeviation="${pdb}" />
+          <feDropShadow dx="${-pdw}" dy="${pdw}" flood-color="#fff4" stdDeviation="${pdb}" />
+          <feDropShadow dx="${pdw}" dy="${pdw}" flood-color="#fff4" stdDeviation="${pdb}" />
+        </filter>
+        <filter id="innershadow">
+          <feDropShadow dx="0" dy="4" flood-color="#fff4" stdDeviation="4" />
+          <feDropShadow dx="0" dy="-4" flood-color="#0004" stdDeviation="4" />
+        </filter>
+        <filter id="outershadow">
+          <feDropShadow dx="0" dy="12" flood-color="#0004" stdDeviation="12" />
+        </filter>
+      </defs>
+
+      
+      <rect x="${tl}" y="${tl}"
+        rx="${radius}" ry="${radius}"
+        width="${width}" height="${width}"
+        fill="url(#grad2)"
+        filter="url(#outershadow)"/>
+
+      <rect x="${tl + outerThickness}" y="${tl + outerThickness}"
+        rx="${innerRadius}" ry="${innerRadius}"
+        width="${innerWidth}" height="${innerWidth}"
+        fill="url(#grad)"
+        filter="url(#innershadow)"/>
+
+      <g filter="url(#shadow)">
+        <path transform="translate(${(1024 - 176 * scale) / 2}, ${
+        (1024 - 224 * scale) / 2
+      }) scale(${scale})"
+              d="M 0,4
+          C 0,2 2,0 4,0 
+                L 48,0
+                C 144,0 176,32 180,112
+                C 176,192 144,224 48,224
+                L 0,224z
+                M 48,48
+                L 68,48
+                C 102,48 132,48 132,112
+                C 132,176 102,176 84,176           
+                L 48,176z"
+              fill="#f0f0f0"
+              fill-rule="evenodd"
+              mask="url(#dither)"/>
+      </g>
+
+    </svg>
+
+    <h1>DitherKit</h1>`;
+
+      const bayer4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+      const proj = (a, b, c, d, i) => ((i - a) / (b - a)) * (d - c) + c;
+
+      for (let y = 0; y < 32; y++) {
+        for (let x = 0; x < 32; x++) {
+          const bx = x % 4;
+          const by = y % 4;
+          const bi = bayer4[by * 4 + bx] / 16 - 0.5;
+          if (y + bi * 26 > 16) {
+            document.querySelector("#dither").innerHTML += `<rect x="${
+              x * 8
+            }" y="${
+              y * 8
+            }" width="8" height="8" stroke="#000" stroke-width=".5" fill="#000"/>`;
+          }
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      document.body.append(canvas);
+      canvas.width = canvas.height = 1024;
+      canvas.style.width = "512px";
+      canvas.style.aspectRatio = "1/1";
+      const ctx = canvas.getContext("2d");
+      const doc =
+        '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        document.querySelector("svg").outerHTML;
+      console.log(doc);
+      const img = new Image();
+      img.onload = function () {
+        ctx.drawImage(img, 0, 0, 1024, 1024);
+      };
+      img.onerror = (e) => console.log(e);
+      const b = new Blob([doc], { type: "image/svg+xml" });
+      console.log(b);
+      const url = URL.createObjectURL(b);
+      img.src = url;
+    </script>
+  </head>
+  <body></body>
+</html>

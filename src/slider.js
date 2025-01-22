@@ -1,4 +1,4 @@
-import { dom, signal } from "@potch/minifw/src/fw.js";
+import { dom, signal, effect } from "@potch/minifw/src/fw.js";
 
 const noop = (v) => v;
 
@@ -21,7 +21,7 @@ export default function Slider({
   sliderId++;
 
   const input = signal();
-  const val = signal();
+  const display = signal();
 
   const el = dom(
     "div",
@@ -40,19 +40,19 @@ export default function Slider({
     }),
     dom("input", {
       type: "text",
-      ref: val,
+      ref: display,
       class: "slider__value",
       value: format(value),
     })
   );
 
   const updateVal = () => {
-    val.val.value = format(input.val.value);
+    display.val.value = format(input.val.value);
     const event = new Event("change", { bubbles: true });
     el.dispatchEvent(event);
   };
 
-  val.val.addEventListener("keydown", (e) => {
+  display.val.addEventListener("keydown", (e) => {
     const i = input.val;
     const val = parseFloat(i.value);
     const step = parseFloat(i.step);
@@ -71,7 +71,10 @@ export default function Slider({
   input.val.addEventListener("input", updateVal);
   input.val.addEventListener("change", updateVal);
 
-  el.input = input.val;
+  effect(() => {
+    el.input = input.val;
+    el.display = input.display;
+  });
 
   return el;
 }

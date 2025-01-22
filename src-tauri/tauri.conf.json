@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ditherbox",
+  "productName": "DitherBox",
   "version": "0.1.0",
   "identifier": "com.twentyminutemile.ditherbox",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "ditherbox",
+        "title": "DitherBox",
         "width": 1024,
         "height": 768
       }

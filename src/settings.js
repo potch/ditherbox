@@ -2,6 +2,7 @@ import { dom as _, signal, on, effect, event } from "@potch/minifw/src/fw.js";
 
 import { SaveCanvas } from "./net.js";
 import Slider from "./slider.js";
+import { signalMap } from "./util.js";
 import * as diffusions from "./diffusions.js";
 
 const toValues = (form) => {
@@ -27,7 +28,7 @@ let ditherInput = _(
   {
     name: "dither",
   },
-  _("option", { value: "none" }, "None (Bayer Only)"),
+  _("option", { value: "bayer" }, "Ordered"),
   ...Object.keys(diffusions).map((value) => _("option", { value }, value))
 );
 
@@ -51,7 +52,7 @@ export const settingsForm = _(
   {},
   _(
     "details",
-    { open: true },
+    { open: true, class: "form__section" },
     _("summary", {}, _("h2", {}, "Adjust")),
     Slider({
       label: "exposure",
@@ -85,8 +86,18 @@ export const settingsForm = _(
   ),
   _(
     "details",
-    {},
+    { class: "form__section" },
     _("summary", {}, _("h2", {}, "Grayscale")),
+    _(
+      "label",
+      { class: "form__row" },
+      "use grayscale",
+      _("input", {
+        name: "grayscale",
+        type: "checkbox",
+        checked: false,
+      })
+    ),
     _(
       "label",
       { class: "form__row" },
@@ -134,14 +145,10 @@ export const settingsForm = _(
   ),
   _(
     "details",
-    { open: true },
+    { open: true, class: "form__section" },
     _("summary", {}, _("h2", {}, "Dither")),
-    _("label", { class: "form__row" }, "dither", ditherInput)
-  ),
-  _(
-    "details",
-    {},
-    _("summary", {}, _("h2", {}, "Bayer")),
+    _("label", { class: "form__row" }, "dither", ditherInput),
+    _("h3", { class: "form__header" }, "Ordered"),
     Slider({
       label: "size",
       name: "bayerSize",
@@ -162,7 +169,7 @@ export const settingsForm = _(
   ),
   _(
     "details",
-    { open: true },
+    { open: true, class: "form__section" },
     _("summary", {}, _("h2", {}, "Output")),
     _(
       "label",
@@ -170,6 +177,16 @@ export const settingsForm = _(
       "simulate display",
       _("input", {
         name: "simulate",
+        type: "checkbox",
+        checked: false,
+      })
+    ),
+    _(
+      "label",
+      { class: "form__row" },
+      "show original",
+      _("input", {
+        name: "original",
         type: "checkbox",
         checked: false,
       })
@@ -187,7 +204,7 @@ export const settingsForm = _(
     Slider({
       label: "zoom",
       name: "zoom",
-      min: 1,
+      min: 0.5,
       max: 4,
       value: 1,
       step: 0.25,
@@ -224,29 +241,35 @@ export const settingsForm = _(
         value: HEIGHT,
       })
     )
-  ),
-  saveLink
+  )
 );
 
-export const settings = signal(toValues(settingsForm));
+export const settingsValues = signal(toValues(settingsForm));
+export const settings = signalMap(settingsValues);
 
 on(settingsForm, "submit", (e) => e.preventDefault());
 on(settingsForm, "input", () => {
-  settings.val = toValues(settingsForm);
+  settingsValues.val = toValues(settingsForm);
 });
 on(settingsForm, "change", () => {
-  settings.val = toValues(settingsForm);
+  settingsValues.val = toValues(settingsForm);
 });
 
 effect(() => {
-  settingsForm.elements.height.disabled = settings.val.autoHeight;
-  settingsForm.elements.normalize.disabled = settings.val.luminance;
-  settingsForm.elements.weightRed.disabled = settings.val.luminance;
-  settingsForm.elements.weightGreen.disabled = settings.val.luminance;
-  settingsForm.elements.weightBlue.disabled = settings.val.luminance;
-  if (settings.val.luminance) {
-    settingsForm.elements.weightRed.value = 0.299;
-    settingsForm.elements.weightGreen.value = 0.587;
-    settingsForm.elements.weightBlue.value = 0.114;
+  const elements = settingsForm.elements;
+  elements.height.disabled = settings.autoHeight;
+
+  elements.luminance.disabled = !settings.grayscale;
+  elements.normalize.disabled = !settings.grayscale && settings.luminance;
+  elements.weightRed.disabled = !settings.grayscale && settings.luminance;
+  elements.weightGreen.disabled = !settings.grayscale && settings.luminance;
+  elements.weightBlue.disabled = !settings.grayscale && settings.luminance;
+
+  elements.bayerSize.disabled = settings.dither !== "bayer";
+  elements.bayerScale.disabled = settings.dither !== "bayer";
+  if (settings.luminance) {
+    elements.weightRed.value = 0.299;
+    elements.weightGreen.value = 0.587;
+    elements.weightBlue.value = 0.114;
   }
 });

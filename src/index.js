@@ -11,28 +11,7 @@ import { generate as generateBayer } from "./bayer.js";
 import { settingsForm, settings } from "./settings.js";
 import * as diffusions from "./diffusions.js";
 
-const filterEvent = (watcher, condition) => {
-  const watchers = new Set();
-  const [emit, watch] = event(watchers);
-  let upstream = null;
-  return (fn) => {
-    const unwatch = watch(fn);
-    if (!upstream) {
-      upstream = watcher((data) => {
-        if (condition(data)) {
-          emit(data);
-        }
-      });
-    }
-    return () => {
-      unwatch();
-      if (!watchers.size) {
-        upstream();
-        upstream = null;
-      }
-    };
-  };
-};
+import { filterEvent } from "./util.js";
 
 const createMenu = async (emit) => {
   const submenu = await Submenu.new({
@@ -121,68 +100,31 @@ const POWERS = Array(9)
   .fill(0)
   .map((_, i) => (1 << i) - 1);
 
-class PackedBits {
-  constructor(...bins) {
-    this.bins = bins;
-  }
-  encode(...values) {
-    return values.reduce(
-      (memo, v, i) =>
-        (memo << this.bins[i]) +
-        Math.round((clamp(0, 255, v) / 255) * POWERS[this.bins[i]]),
-      0
-    );
-  }
-  decode(n) {
-    let out = [];
-    for (let i = this.bins.length - 1; i >= 0; i--) {
-      let b = this.bins[i];
-      let v = n & POWERS[b];
-      n = n >> b;
-      out[i] = (v / POWERS[b]) * 255;
-    }
-    return out;
-  }
-}
-
-class PackedYUV extends PackedBits {
-  encode(r, g, b) {
-    let [y, u, v] = rgb2yuv(r, g, b);
-    return super.encode(y, u + 128, v + 128);
-  }
-  decode(n) {
-    const [y, u, v] = super.decode(n);
-    return yuv2rgb(y, u - 128, v - 128).map((n) => Math.round(n));
-  }
-}
-
-class PackedRGB extends PackedBits {
-  encode(r, g, b) {
-    return super.encode(gammaIn(r), gammaIn(g), gammaIn(b));
-  }
-  decode(n) {
-    return super.decode(n).map((v) => gammaOut(v));
-  }
-}
-
 class IndexedColor {
   constructor(colors) {
     this.colors = colors;
   }
   encode(r, g, b) {
     let error = Infinity;
-    let match = null;
-    for (let [n, color] of Object.entries(this.colors)) {
-      let e = rgbDistance(r, g, b, ...color);
+    let componentError = [Infinity, Infinity, Infinity];
+    let match = 0;
+    for (let n = 0; n < this.colors.length; n++) {
+      const color = this.colors[n];
+      let dr = r - color[0];
+      let dg = g - color[1];
+      let db = b - color[2];
+      let dl = dr * 0.3 + dg * 0.6 + db * 0.1;
+      let e = dr * dr + dg * dg + db * db + dl * dl;
       if (e < error) {
         error = e;
+        componentError = [dr, dg, db];
         match = n;
       }
       if (error === 0) {
-        return match;
+        return [match, error, componentError];
       }
     }
-    return match;
+    return [match, error, componentError];
   }
   decode(n) {
     return this.colors[n];
@@ -191,6 +133,18 @@ class IndexedColor {
 
 const encoding = new IndexedColor([
   [0, 0, 0],
+  [128, 0, 0],
+  [0, 128, 0],
+  [0, 0, 128],
+  [128, 128, 0],
+  [0, 128, 128],
+  [128, 0, 128],
+  [255, 0, 0],
+  [0, 255, 0],
+  [0, 0, 255],
+  [255, 255, 0],
+  [0, 255, 255],
+  [255, 0, 255],
   [255, 255, 255],
 ]);
 
@@ -210,12 +164,10 @@ const encoding = new IndexedColor([
     console.log(currentWindow, selectedFile.val);
     currentWindow.setTitle(
       selectedFile.val
-        ? `${pathname(selectedFile.val)} - ditherbox`
-        : "ditherbox"
+        ? `${pathname(selectedFile.val)} - DitherBox`
+        : "DitherBox"
     );
   });
-
-  activeImage.val = await loadImage("/src/assets/snowy-hill.jpg");
 
   onFileMenu(async () => {
     selectedFile.val = await open({
@@ -241,19 +193,12 @@ const encoding = new IndexedColor([
   let id; //= ctx.getImageData(0, 0, width, height);
   let out; //= new ImageData(width, height);
 
-  canvas.addEventListener("mousedown", (e) => {
-    console.log("drawing");
-    ctx.drawImage(i, 0, 0, canvas.width, canvas.height);
-  });
-  canvas.addEventListener("mouseup", draw);
-  canvas.addEventListener("mouseleave", draw);
-
   function update() {
     const img = activeImage.val;
-    let { width, zoom, autoHeight, height } = settings.val;
+    let { width, zoom, autoHeight, height } = settings;
 
     if (!img) return;
-    if (!width) return;
+    if (!width || width < 16) return;
 
     if (autoHeight) {
       height = ((width * img.naturalHeight) / img.naturalWidth) | 0;
@@ -281,12 +226,6 @@ const encoding = new IndexedColor([
   }
 
   function draw() {
-    const { width, height } = id;
-    let input = new ImageData(width, height);
-    input.data.set(id.data);
-    let grayscale = new Float32Array(width * height);
-    ctx.clearRect(0, 0, width, height);
-
     let {
       dither,
       gamma,
@@ -299,7 +238,20 @@ const encoding = new IndexedColor([
       weightRed,
       weightGreen,
       weightBlue,
-    } = settings.val;
+      grayscale,
+      original,
+    } = settings;
+
+    if (!id) return;
+    const { width, height } = id;
+    let input = new ImageData(width, height);
+    input.data.set(id.data);
+    ctx.clearRect(0, 0, width, height);
+
+    if (original) {
+      ctx.putImageData(input, 0, 0);
+      return;
+    }
 
     GAMMA = gamma;
     const algo = encoding;
@@ -312,8 +264,6 @@ const encoding = new IndexedColor([
     contrast = contrast;
     const preserveTransparency = !!transparency;
 
-    console.log("dither", dither, bayerSize, bayerScale, bayerMax, bayerTable);
-
     const weights = {
       r: weightRed,
       g: weightGreen,
@@ -325,47 +275,65 @@ const encoding = new IndexedColor([
     }
 
     let errorScale, errorDiffusion;
-    if (dither !== "none") {
+    if (dither !== "bayer") {
       ({ errorScale, errorDiffusion } = diffusions[dither]);
     }
-    for (let i = 0; i < grayscale.length; i++) {
-      const idx = i * 4;
+    for (let idx = 0; idx < input.data.length; idx += 4) {
       let ir = clamp(0, 255, input.data[idx]);
       let ig = clamp(0, 255, input.data[idx + 1]);
       let ib = clamp(0, 255, input.data[idx + 2]);
-      let lum =
-        (ir * weights.r + ig * weights.g + ib * weights.b) / totalWeight;
-      grayscale[i] = (gammaIn(lum) - 128) * contrast + 128 + brightness * 255;
+      if (grayscale) {
+        let lum =
+          (ir * weights.r + ig * weights.g + ib * weights.b) / totalWeight;
+        ir = lum;
+        ig = lum;
+        ib = lum;
+      }
+      input.data[idx] = gammaOut(
+        (gammaIn(ir) - 128) * contrast + 128 + brightness * 255
+      );
+      input.data[idx + 1] = gammaOut(
+        (gammaIn(ig) - 128) * contrast + 128 + brightness * 255
+      );
+      input.data[idx + 2] = gammaOut(
+        (gammaIn(ib) - 128) * contrast + 128 + brightness * 255
+      );
     }
-    for (let i = 0; i < grayscale.length; i++) {
-      const idx = i * 4;
+    for (let idx = 0; idx < input.data.length; idx += 4) {
+      const i = idx / 4;
       const x = i % width;
       const y = (i / width) | 0;
-      let lum = grayscale[i];
-      if (dither === "none") {
+      let pr = input.data[idx];
+      let pg = input.data[idx + 1];
+      let pb = input.data[idx + 2];
+      if (dither === "bayer") {
         const bx = x % bayerSize;
         const by = y % bayerSize;
         const bi = by * bayerSize + bx;
         let bd = (bayerTable[bi] - bayerMax / 2) * bayerScale;
-        lum += bd;
+        pr += bd;
+        pg += bd;
+        pb += bd;
       }
-      let c = lum > 128 ? 255 : 0;
-      out.data[idx] = c;
-      out.data[idx + 1] = c;
-      out.data[idx + 2] = c;
+      let [c, error, componentError] = encoding.encode(pr, pg, pb);
+      c = encoding.decode(c);
+      out.data[idx] = c[0];
+      out.data[idx + 1] = c[1];
+      out.data[idx + 2] = c[2];
       if (preserveTransparency) {
         out.data[idx + 3] = input.data[idx + 3];
       } else {
         out.data[idx + 3] = 255;
       }
-      if (dither !== "none") {
-        const err = lum - c;
+      if (dither !== "bayer") {
         for (let [dx, dy, di] of errorDiffusion) {
           let px = x + dx;
           let py = y + dy;
-          let pidx = px + py * width;
+          let pidx = (px + py * width) * 4;
           if (px >= 0 && px <= width - 1 && py >= 0 && py <= height - 1) {
-            grayscale[pidx] += err * (di / errorScale);
+            input.data[pidx] += componentError[0] * (di / errorScale);
+            input.data[pidx + 1] += componentError[1] * (di / errorScale);
+            input.data[pidx + 2] += componentError[2] * (di / errorScale);
           }
         }
       }
